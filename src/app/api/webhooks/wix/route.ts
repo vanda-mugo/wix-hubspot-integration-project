@@ -208,16 +208,22 @@ async function handleContactEvent(
     `[WIX WEBHOOK] Syncing contact ${contactId} (event: ${eventType}, eventId: ${eventId})`,
   );
 
-  // Fire-and-forget sync (respond 200 immediately)
-  syncWixToHubSpot(
-    installation.id,
-    instanceId,
-    contactId,
-    eventId,
-    eventType,
-  ).catch((err) => {
-    logger.error("Background Wix→HubSpot sync failed:", err);
-  });
+  // Await sync so Vercel doesn't kill the function before it completes
+  try {
+    const result = await syncWixToHubSpot(
+      installation.id,
+      instanceId,
+      contactId,
+      eventId,
+      eventType,
+    );
+    console.log(
+      `[WIX WEBHOOK] Sync result: success=${result.success} wixContactId=${result.wixContactId} hubspotContactId=${result.hubspotContactId || 'none'}`,
+    );
+  } catch (err) {
+    console.error(`[WIX WEBHOOK] Sync FAILED:`, err);
+    logger.error("Wix→HubSpot sync failed:", err);
+  }
 }
 
 async function handleFormSubmission(
@@ -259,10 +265,12 @@ async function handleFormSubmission(
     submittedAt: formData.createdDate as string | undefined,
   };
 
-  // Fire-and-forget
-  syncFormToHubSpot(installation.id, instanceId, submission, eventId).catch(
-    (err) => {
-      logger.error("Background form→HubSpot sync failed:", err);
-    },
-  );
+  // Await sync so Vercel doesn't kill the function before it completes
+  try {
+    await syncFormToHubSpot(installation.id, instanceId, submission, eventId);
+    console.log(`[WIX WEBHOOK] Form sync completed for event ${eventId}`);
+  } catch (err) {
+    console.error(`[WIX WEBHOOK] Form sync FAILED:`, err);
+    logger.error("Form→HubSpot sync failed:", err);
+  }
 }
