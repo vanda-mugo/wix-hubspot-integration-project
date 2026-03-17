@@ -87,6 +87,9 @@ export async function syncWixToHubSpot(
     // Add sync source marker for loop prevention
     hubspotProps.wix_sync_source = correlationId;
 
+    // Ensure custom HubSpot properties exist before creating/updating
+    await ensureUtmProperties(installationId);
+
     // Step 5: Check for existing mapping
     const existingMapping = await prisma.contactMapping.findUnique({
       where: { installationId_wixContactId: { installationId, wixContactId } },
