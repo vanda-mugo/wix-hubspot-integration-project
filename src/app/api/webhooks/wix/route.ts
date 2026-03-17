@@ -209,7 +209,9 @@ async function handleContactEvent(
         transform: m.transform || null,
       })),
     });
-    console.log(`[WIX WEBHOOK] Seeded ${defaults.length} default field mappings`);
+    console.log(
+      `[WIX WEBHOOK] Seeded ${defaults.length} default field mappings`,
+    );
   }
 
   // Contact ID comes from entityId (already extracted from the nested payload)
@@ -236,7 +238,7 @@ async function handleContactEvent(
       eventType,
     );
     console.log(
-      `[WIX WEBHOOK] Sync result: success=${result.success} wixContactId=${result.wixContactId} hubspotContactId=${result.hubspotContactId || 'none'}`,
+      `[WIX WEBHOOK] Sync result: success=${result.success} wixContactId=${result.wixContactId} hubspotContactId=${result.hubspotContactId || "none"}`,
     );
   } catch (err) {
     console.error(`[WIX WEBHOOK] Sync FAILED:`, err);

@@ -83,9 +83,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // Process each event (fire-and-forget for speed)
+    // Process each event — must await on Vercel (serverless kills after response)
     for (const event of events) {
-      // Skip events from CRM_UI or INTEGRATION (our own writes)
+      // Skip events from INTEGRATION (our own writes) to prevent loops
       if (event.changeSource === "INTEGRATION") {
         logger.info(`Skipping INTEGRATION event for contact ${event.objectId}`);
         continue;
@@ -97,15 +97,20 @@ export async function POST(request: NextRequest) {
       switch (event.subscriptionType) {
         case "contact.creation":
         case "contact.propertyChange":
-          syncHubSpotToWix(
-            installation.id,
-            installation.wixInstanceId,
-            hubspotContactId,
-            eventId,
-            event.subscriptionType,
-          ).catch((err) => {
-            logger.error("Background HubSpot→Wix sync failed:", err);
-          });
+          try {
+            await syncHubSpotToWix(
+              installation.id,
+              installation.wixInstanceId,
+              hubspotContactId,
+              eventId,
+              event.subscriptionType,
+            );
+          } catch (err) {
+            logger.error(
+              `HubSpot→Wix sync failed for contact ${hubspotContactId}:`,
+              err,
+            );
+          }
           break;
 
         default:
@@ -115,7 +120,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Must respond 200 quickly — HubSpot has a 5-second timeout
     return NextResponse.json({ received: true });
   } catch (error) {
     logger.error("HubSpot webhook error:", error);

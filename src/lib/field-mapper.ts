@@ -31,8 +31,12 @@ export function extractWixContactFields(
     fields.email = emails.items[0].email;
   } else {
     // Fallback to primaryInfo or primaryEmail
-    const primaryInfo = contact.primaryInfo as Record<string, unknown> | undefined;
-    const primaryEmail = contact.primaryEmail as Record<string, unknown> | undefined;
+    const primaryInfo = contact.primaryInfo as
+      | Record<string, unknown>
+      | undefined;
+    const primaryEmail = contact.primaryEmail as
+      | Record<string, unknown>
+      | undefined;
     const email =
       (primaryInfo?.email as string) || (primaryEmail?.email as string);
     if (email) fields.email = email;
@@ -45,8 +49,12 @@ export function extractWixContactFields(
   if (phones?.items?.[0]?.phone) {
     fields.phone = phones.items[0].phone;
   } else {
-    const primaryInfo = contact.primaryInfo as Record<string, unknown> | undefined;
-    const primaryPhone = contact.primaryPhone as Record<string, unknown> | undefined;
+    const primaryInfo = contact.primaryInfo as
+      | Record<string, unknown>
+      | undefined;
+    const primaryPhone = contact.primaryPhone as
+      | Record<string, unknown>
+      | undefined;
     const phone =
       (primaryInfo?.phone as string) || (primaryPhone?.phone as string);
     if (phone) fields.phone = phone;

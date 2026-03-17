@@ -74,7 +74,9 @@ export async function POST(request: NextRequest) {
           transform: m.transform || null,
         })),
       });
-      console.log(`[WIX RESOLVE] Seeded ${defaults.length} default field mappings for ${instanceId}`);
+      console.log(
+        `[WIX RESOLVE] Seeded ${defaults.length} default field mappings for ${instanceId}`,
+      );
     }
 
     return NextResponse.json({
