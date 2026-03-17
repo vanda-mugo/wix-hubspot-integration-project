@@ -1,155 +1,251 @@
 import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/db";
+import logger from "@/lib/logger";
+import { syncWixToHubSpot, syncFormToHubSpot } from "@/lib/sync-engine";
+import { getDefaultFieldMappings } from "@/lib/field-mapper";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Wix Webhook Receiver
  *
  * Handles all Wix webhook events:
- * - app.installed        → store instanceId for the site
- * - contact.created      → sync new contact to HubSpot
- * - contact.updated      → sync updated contact to HubSpot
- * - form_submission.created → push form data to HubSpot
+ * - app.installed              → create Installation record
+ * - contact.created            → sync new contact to HubSpot
+ * - contact.updated            → sync updated contact to HubSpot
+ * - form_submission.created    → push form data to HubSpot
  *
  * Wix sends webhook payloads as JWT-signed strings (not JSON).
- * We verify the JWT signature using the Wix Public Key before processing.
  */
-
-// Temporary in-memory log for development — will be replaced with DB logging
-const recentEvents: Array<{ type: string; timestamp: string; payload: unknown }> = [];
 
 export async function POST(request: NextRequest) {
   try {
-    // Wix sends the body as a raw JWT string, not JSON
     const body = await request.text();
 
     if (!body) {
-      console.error("[Wix Webhook] Empty body received");
       return NextResponse.json({ error: "Empty body" }, { status: 400 });
     }
 
-    // For now, decode the JWT payload without verification (development mode)
-    // TODO: Add proper JWT verification using Wix Public Key
+    // Decode JWT payload
     let payload: Record<string, unknown>;
     try {
-      // JWT format: header.payload.signature
       const parts = body.split(".");
       if (parts.length === 3) {
-        // Base64URL decode the payload (second part)
         const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const jsonStr = Buffer.from(base64, "base64").toString("utf-8");
         payload = JSON.parse(jsonStr);
       } else {
-        // If it's not a JWT, try parsing as JSON (for testing)
         payload = JSON.parse(body);
       }
     } catch {
-      console.error("[Wix Webhook] Failed to parse body");
+      logger.error("Wix webhook: Failed to parse body");
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
     // Extract event metadata
-    const eventType = (payload.data as Record<string, unknown>)?.eventType as string
-      || payload.eventType as string
-      || "unknown";
-    const instanceId = (payload.data as Record<string, unknown>)?.instanceId as string
-      || payload.instanceId as string
-      || "unknown";
+    const dataObj = payload.data as Record<string, unknown> | undefined;
+    const eventType =
+      (dataObj?.eventType as string) ||
+      (payload.eventType as string) ||
+      "unknown";
+    const instanceId =
+      (dataObj?.instanceId as string) ||
+      (payload.instanceId as string) ||
+      "unknown";
 
-    console.log(`[Wix Webhook] Received event: ${eventType} for instance: ${instanceId}`);
-
-    // Log the event (development)
-    recentEvents.unshift({
-      type: eventType,
-      timestamp: new Date().toISOString(),
-      payload,
-    });
-    // Keep only last 50 events in memory
-    if (recentEvents.length > 50) recentEvents.pop();
+    logger.info(`Wix webhook: ${eventType} for instance ${instanceId}`);
 
     // Route by event type
     switch (true) {
-      case eventType.includes("app.installed"):
-      case eventType.includes("AppInstalled"):
-        await handleAppInstalled(instanceId, payload);
+      case eventType.includes("app.installed") ||
+        eventType.includes("AppInstalled"):
+        await handleAppInstalled(instanceId);
         break;
 
-      case eventType.includes("contact.created"):
-      case eventType.includes("ContactCreated"):
-        await handleContactCreated(instanceId, payload);
+      case eventType.includes("contact.created") ||
+        eventType.includes("ContactCreated"):
+        await handleContactEvent(instanceId, payload, "contact.created");
         break;
 
-      case eventType.includes("contact.updated"):
-      case eventType.includes("ContactUpdated"):
-        await handleContactUpdated(instanceId, payload);
+      case eventType.includes("contact.updated") ||
+        eventType.includes("ContactUpdated"):
+        await handleContactEvent(instanceId, payload, "contact.updated");
         break;
 
-      case eventType.includes("form_submission.created"):
-      case eventType.includes("FormSubmissionCreated"):
+      case eventType.includes("form_submission") ||
+        eventType.includes("FormSubmission"):
         await handleFormSubmission(instanceId, payload);
         break;
 
       default:
-        console.log(`[Wix Webhook] Unhandled event type: ${eventType}`);
+        logger.info(`Wix webhook: Unhandled event type: ${eventType}`);
     }
 
-    // IMPORTANT: Must respond 200 within 1250ms or Wix will retry
+    // Must respond 200 within 1250ms or Wix will retry
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("[Wix Webhook] Error processing webhook:", error);
-    // Still return 200 to prevent Wix from retrying on application errors
+    logger.error("Wix webhook error:", error);
     return NextResponse.json({ received: true, error: "Processing error" });
   }
 }
 
-// Also handle GET for health check / verification
 export async function GET() {
   return NextResponse.json({
     status: "ok",
     endpoint: "Wix Webhook Receiver",
-    message: "This endpoint accepts POST requests from Wix webhooks.",
-    recentEventsCount: recentEvents.length,
   });
 }
 
-// ─── Event Handlers ──────────────────────────────────────────────
+// ─── Event Handlers ──────────────────────────────────────
 
-async function handleAppInstalled(instanceId: string, payload: Record<string, unknown>) {
-  console.log(`[Wix Webhook] App installed on site: ${instanceId}`);
-  // TODO: Create Installation record in database
-  // await prisma.installation.create({ data: { wixInstanceId: instanceId } });
-  console.log("[Wix Webhook] TODO: Store installation in database", { instanceId, payload: "logged" });
+async function handleAppInstalled(instanceId: string) {
+  logger.info(`App installed on Wix site: ${instanceId}`);
+
+  // Create installation record (upsert to handle re-installs)
+  const installation = await prisma.installation.upsert({
+    where: { wixInstanceId: instanceId },
+    create: { wixInstanceId: instanceId },
+    update: {}, // No updates on re-install
+  });
+
+  // Seed default field mappings
+  const existingMappings = await prisma.fieldMapping.count({
+    where: { installationId: installation.id },
+  });
+
+  if (existingMappings === 0) {
+    const defaults = getDefaultFieldMappings();
+    await prisma.fieldMapping.createMany({
+      data: defaults.map((m) => ({
+        installationId: installation.id,
+        wixField: m.wixField,
+        hubspotProperty: m.hubspotProperty,
+        syncDirection: m.syncDirection,
+        transform: m.transform || null,
+      })),
+    });
+    logger.info(`Seeded ${defaults.length} default field mappings`);
+  }
 }
 
-async function handleContactCreated(instanceId: string, payload: Record<string, unknown>) {
-  console.log(`[Wix Webhook] Contact created on site: ${instanceId}`);
-  // TODO: Sync new contact to HubSpot
-  // 1. Check ProcessedEvent (dedupe)
-  // 2. Check SyncEvent (loop prevention)
-  // 3. Apply field mappings
-  // 4. Create/upsert contact in HubSpot
-  // 5. Store ContactMapping
-  // 6. Log SyncEvent
-  console.log("[Wix Webhook] TODO: Sync contact to HubSpot", { instanceId, payload: "logged" });
+async function handleContactEvent(
+  instanceId: string,
+  payload: Record<string, unknown>,
+  eventType: string,
+) {
+  // Find installation
+  const installation = await prisma.installation.findUnique({
+    where: { wixInstanceId: instanceId },
+  });
+
+  if (!installation) {
+    logger.warn(`No installation found for Wix instance ${instanceId}`);
+    return;
+  }
+
+  if (!installation.isConnected) {
+    logger.info("HubSpot not connected — skipping sync");
+    return;
+  }
+
+  // Extract contact ID from the payload
+  const dataObj = payload.data as Record<string, unknown> | undefined;
+  const innerData = dataObj?.data;
+  let contactId: string | undefined;
+
+  if (typeof innerData === "string") {
+    try {
+      const parsed = JSON.parse(innerData);
+      contactId = parsed.contactId || parsed.id;
+    } catch {
+      // Not JSON
+    }
+  } else if (innerData && typeof innerData === "object") {
+    contactId =
+      (innerData as Record<string, string>).contactId ||
+      (innerData as Record<string, string>).id;
+  }
+
+  // Also check top-level entityId
+  contactId =
+    contactId || (payload.entityId as string) || (dataObj?.entityId as string);
+
+  if (!contactId) {
+    logger.warn("Could not extract contact ID from webhook payload");
+    return;
+  }
+
+  const eventId =
+    (payload.eventId as string) ||
+    (dataObj?.eventId as string) ||
+    `wix-${contactId}-${Date.now()}`;
+
+  // Fire-and-forget sync (respond 200 immediately)
+  syncWixToHubSpot(
+    installation.id,
+    instanceId,
+    contactId,
+    eventId,
+    eventType,
+  ).catch((err) => {
+    logger.error("Background Wix→HubSpot sync failed:", err);
+  });
 }
 
-async function handleContactUpdated(instanceId: string, payload: Record<string, unknown>) {
-  console.log(`[Wix Webhook] Contact updated on site: ${instanceId}`);
-  // TODO: Sync updated contact to HubSpot
-  // 1. Check ProcessedEvent (dedupe)
-  // 2. Check SyncEvent (loop prevention — skip if this was our own write)
-  // 3. Apply field mappings
-  // 4. Idempotency check (skip if values unchanged)
-  // 5. Update contact in HubSpot
-  // 6. Update ContactMapping + log SyncEvent
-  console.log("[Wix Webhook] TODO: Sync contact update to HubSpot", { instanceId, payload: "logged" });
-}
+async function handleFormSubmission(
+  instanceId: string,
+  payload: Record<string, unknown>,
+) {
+  const installation = await prisma.installation.findUnique({
+    where: { wixInstanceId: instanceId },
+  });
 
-async function handleFormSubmission(instanceId: string, payload: Record<string, unknown>) {
-  console.log(`[Wix Webhook] Form submitted on site: ${instanceId}`);
-  // TODO: Push form submission to HubSpot
-  // 1. Extract email, name, custom fields
-  // 2. Extract UTM params (utm_source, utm_medium, etc.)
-  // 3. Extract page URL, referrer, timestamp
-  // 4. Upsert contact in HubSpot with all properties
-  // 5. Store ContactMapping + log SyncEvent
-  console.log("[Wix Webhook] TODO: Push form submission to HubSpot", { instanceId, payload: "logged" });
+  if (!installation) {
+    logger.warn(`No installation found for Wix instance ${instanceId}`);
+    return;
+  }
+
+  if (!installation.isConnected) {
+    logger.info("HubSpot not connected — skipping form sync");
+    return;
+  }
+
+  // Extract form data
+  const dataObj = payload.data as Record<string, unknown> | undefined;
+  const innerData = dataObj?.data;
+  let formData: Record<string, unknown> = {};
+
+  if (typeof innerData === "string") {
+    try {
+      formData = JSON.parse(innerData);
+    } catch {
+      formData = {};
+    }
+  } else if (innerData && typeof innerData === "object") {
+    formData = innerData as Record<string, unknown>;
+  }
+
+  const submissions =
+    (formData.submissions as Record<string, string>) ||
+    (formData.values as Record<string, string>) ||
+    {};
+
+  const eventId =
+    (payload.eventId as string) ||
+    (formData.submissionId as string) ||
+    `form-${uuidv4()}`;
+
+  const submission = {
+    fields: submissions,
+    pageUrl: formData.pageUrl as string | undefined,
+    referrer: formData.referrer as string | undefined,
+    utmParams: formData.utmParams as Record<string, string> | undefined,
+    submittedAt: formData.createdDate as string | undefined,
+  };
+
+  // Fire-and-forget
+  syncFormToHubSpot(installation.id, instanceId, submission, eventId).catch(
+    (err) => {
+      logger.error("Background form→HubSpot sync failed:", err);
+    },
+  );
 }
