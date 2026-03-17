@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
       "crm.objects.contacts.read",
       "crm.objects.contacts.write",
       "crm.schemas.contacts.read",
+      "crm.schemas.contacts.write",
     ].join(" ");
 
     const authUrl = new URL("https://app.hubspot.com/oauth/authorize");

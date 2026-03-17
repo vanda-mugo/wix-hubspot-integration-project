@@ -84,11 +84,9 @@ export async function syncWixToHubSpot(
       return { success: true, wixContactId };
     }
 
-    // Add sync source marker for loop prevention
-    hubspotProps.wix_sync_source = correlationId;
-
-    // Ensure custom HubSpot properties exist before creating/updating
-    await ensureUtmProperties(installationId);
+    // Note: wix_sync_source custom property requires crm.schemas.contacts.write scope.
+    // Only include it if custom properties have been provisioned.
+    // Loop prevention works via database (ContactMapping.syncCorrelationId) regardless.
 
     // Step 5: Check for existing mapping
     const existingMapping = await prisma.contactMapping.findUnique({
