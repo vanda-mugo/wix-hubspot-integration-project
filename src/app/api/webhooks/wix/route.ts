@@ -19,10 +19,18 @@ import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.text();
+    // Log all relevant headers
+    const headersObj: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      if (key.startsWith("x-wix") || key.startsWith("x-") || key === "content-type") {
+        headersObj[key] = value;
+      }
+    });
+    console.log("[WIX WEBHOOK] Headers:", JSON.stringify(headersObj));
 
+    const body = await request.text();
     console.log("[WIX WEBHOOK] Raw body length:", body?.length);
-    console.log("[WIX WEBHOOK] Raw body (first 500 chars):", body?.substring(0, 500));
+    console.log("[WIX WEBHOOK] Raw body (first 1000 chars):", body?.substring(0, 1000));
 
     if (!body) {
       return NextResponse.json({ error: "Empty body" }, { status: 400 });
@@ -36,10 +44,12 @@ export async function POST(request: NextRequest) {
         const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const jsonStr = Buffer.from(base64, "base64").toString("utf-8");
         payload = JSON.parse(jsonStr);
-        console.log("[WIX WEBHOOK] Decoded JWT payload:", JSON.stringify(payload).substring(0, 1000));
+        console.log("[WIX WEBHOOK] Decoded JWT payload keys:", Object.keys(payload));
+        console.log("[WIX WEBHOOK] Decoded JWT payload:", JSON.stringify(payload).substring(0, 2000));
       } else {
         payload = JSON.parse(body);
-        console.log("[WIX WEBHOOK] Parsed JSON payload:", JSON.stringify(payload).substring(0, 1000));
+        console.log("[WIX WEBHOOK] Parsed JSON payload keys:", Object.keys(payload));
+        console.log("[WIX WEBHOOK] Parsed JSON payload:", JSON.stringify(payload).substring(0, 2000));
       }
     } catch (parseErr) {
       console.error("[WIX WEBHOOK] Failed to parse body:", parseErr);
@@ -47,16 +57,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    // Extract event metadata
+    // Extract event metadata — check multiple possible locations
     const dataObj = payload.data as Record<string, unknown> | undefined;
     const eventType =
-      (dataObj?.eventType as string) ||
+      (payload.webhookEvent as string) ||
       (payload.eventType as string) ||
+      (payload.event as string) ||
+      (dataObj?.eventType as string) ||
+      (dataObj?.type as string) ||
+      (request.headers.get("x-wix-event-type")) ||
+      (request.headers.get("x-wix-webhook-event")) ||
       "unknown";
     const instanceId =
-      (dataObj?.instanceId as string) ||
       (payload.instanceId as string) ||
+      (dataObj?.instanceId as string) ||
+      (payload.instance as string) ||
       "unknown";
+
+    console.log("[WIX WEBHOOK] Resolved eventType:", eventType, "instanceId:", instanceId);
 
     logger.info(`Wix webhook: ${eventType} for instance ${instanceId}`);
 
