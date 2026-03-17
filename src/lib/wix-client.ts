@@ -110,7 +110,7 @@ export async function updateWixContact(
   contactData: Record<string, unknown>,
 ): Promise<{ id?: string; [key: string]: unknown }> {
   let attempts = 0;
-  while (attempts < 2) {
+  while (attempts < 5) {
     try {
       // Get current revision
       const current = await getWixContact(instanceId, contactId);
@@ -135,10 +135,11 @@ export async function updateWixContact(
         result?.details?.applicationError?.code === "CONTACT_ALREADY_CHANGED"
       ) {
         logger.warn(
-          "Wix contact update 409: retrying with latest revision",
+          `Wix contact update 409: retry ${attempts + 1}/5 for`,
           contactId,
         );
         attempts++;
+        await new Promise((res) => setTimeout(res, 100));
         continue;
       }
       logger.info("Updated Wix contact:", contactId);
@@ -148,7 +149,9 @@ export async function updateWixContact(
       throw error;
     }
   }
-  throw new Error("Failed to update Wix contact after retrying revision");
+  throw new Error(
+    "Failed to update Wix contact after 5 retries due to revision conflicts",
+  );
 }
 
 /**
