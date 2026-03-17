@@ -42,19 +42,12 @@ interface SyncStatusData {
 
 // ─── Helper: Get installation context from Wix iframe ────
 
-function getInstallationContext(): {
-  installationId: string;
-  instanceId: string;
-} {
-  // In Wix iframe, instance is passed via URL query or Wix SDK
+function getWixInstanceToken(): string {
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
-    return {
-      installationId: params.get("installationId") || "",
-      instanceId: params.get("instanceId") || params.get("instance") || "",
-    };
+    return params.get("instance") || "";
   }
-  return { installationId: "", instanceId: "" };
+  return "";
 }
 
 // ─── Main Dashboard ──────────────────────────────────────
@@ -69,6 +62,7 @@ export default function DashboardPage() {
   const [conflictStrategy, setConflictStrategy] = useState("LAST_UPDATED_WINS");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [initError, setInitError] = useState("");
   const [message, setMessage] = useState<{
     text: string;
     type: "success" | "error";
@@ -120,9 +114,38 @@ export default function DashboardPage() {
   }, [ctx.installationId, baseUrl]);
 
   useEffect(() => {
-    const context = getInstallationContext();
-    setCtx(context);
-  }, []);
+    async function resolveContext() {
+      const instanceToken = getWixInstanceToken();
+      if (!instanceToken) {
+        setInitError("Missing installation context. This page should be loaded from the Wix dashboard.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${baseUrl}/api/auth/wix/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instance: instanceToken }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setCtx({
+            installationId: data.data.installationId,
+            instanceId: data.data.instanceId,
+          });
+        } else {
+          setInitError(data.error || "Failed to resolve installation context.");
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to resolve Wix instance:", err);
+        setInitError("Failed to connect to server.");
+        setLoading(false);
+      }
+    }
+    resolveContext();
+  }, [baseUrl]);
 
   useEffect(() => {
     if (ctx.installationId) loadData();
@@ -274,14 +297,13 @@ export default function DashboardPage() {
 
   // ─── Render ────────────────────────────────────────────
 
-  if (!ctx.installationId) {
+  if (initError) {
     return (
       <div style={styles.container}>
         <h1 style={styles.title}>Wix ↔ HubSpot Integration</h1>
         <div style={styles.card}>
           <p style={styles.muted}>
-            Missing installation context. This page should be loaded from the
-            Wix dashboard.
+            {initError}
           </p>
         </div>
       </div>
