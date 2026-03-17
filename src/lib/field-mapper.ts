@@ -191,30 +191,40 @@ export function mapHubSpotToWix(
 }
 
 /**
- * Convert flat Wix field key-values back into the nested Wix contact structure
- * that the Wix SDK expects for create/update operations.
+ * Convert flat Wix field key-values back into the nested Wix v4 contact structure
+ * that the Wix REST API expects for create/update operations.
+ *
+ * Wix v4 Contacts API shape:
+ *   info.name.first / info.name.last
+ *   info.emails.items[{ tag, email }]
+ *   info.phones.items[{ tag, phone }]
+ *   info.company          (top-level shortcut)
+ *   info.jobTitle          (top-level shortcut)
  */
-export function buildWixContactPayload(fields: Record<string, string>): {
-  firstName?: string;
-  lastName?: string;
-  emails?: string[];
-  phones?: string[];
-  company?: string;
-  jobTitle?: string;
-} {
-  const payload: {
-    firstName?: string;
-    lastName?: string;
-    emails?: string[];
-    phones?: string[];
-    company?: string;
-    jobTitle?: string;
-  } = {};
+export function buildWixContactPayload(
+  fields: Record<string, string>,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
 
-  if (fields.firstName) payload.firstName = fields.firstName;
-  if (fields.lastName) payload.lastName = fields.lastName;
-  if (fields.email) payload.emails = [fields.email];
-  if (fields.phone) payload.phones = [fields.phone];
+  // Name
+  if (fields.firstName || fields.lastName) {
+    payload.name = {
+      ...(fields.firstName ? { first: fields.firstName } : {}),
+      ...(fields.lastName ? { last: fields.lastName } : {}),
+    };
+  }
+
+  // Emails — array of objects
+  if (fields.email) {
+    payload.emails = { items: [{ tag: "MAIN", email: fields.email }] };
+  }
+
+  // Phones — array of objects
+  if (fields.phone) {
+    payload.phones = { items: [{ tag: "MAIN", phone: fields.phone }] };
+  }
+
+  // Company & job title (top-level info shortcuts supported by v4)
   if (fields.company) payload.company = fields.company;
   if (fields.jobTitle) payload.jobTitle = fields.jobTitle;
 
