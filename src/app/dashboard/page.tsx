@@ -117,7 +117,9 @@ export default function DashboardPage() {
     async function resolveContext() {
       const instanceToken = getWixInstanceToken();
       if (!instanceToken) {
-        setInitError("Missing installation context. This page should be loaded from the Wix dashboard.");
+        setInitError(
+          "Missing installation context. This page should be loaded from the Wix dashboard.",
+        );
         setLoading(false);
         return;
       }
@@ -302,9 +304,7 @@ export default function DashboardPage() {
       <div style={styles.container}>
         <h1 style={styles.title}>Wix ↔ HubSpot Integration</h1>
         <div style={styles.card}>
-          <p style={styles.muted}>
-            {initError}
-          </p>
+          <p style={styles.muted}>{initError}</p>
         </div>
       </div>
     );

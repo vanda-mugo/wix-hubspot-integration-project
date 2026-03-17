@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
 
+    console.log("[WIX WEBHOOK] Raw body length:", body?.length);
+    console.log("[WIX WEBHOOK] Raw body (first 500 chars):", body?.substring(0, 500));
+
     if (!body) {
       return NextResponse.json({ error: "Empty body" }, { status: 400 });
     }
@@ -33,10 +36,13 @@ export async function POST(request: NextRequest) {
         const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const jsonStr = Buffer.from(base64, "base64").toString("utf-8");
         payload = JSON.parse(jsonStr);
+        console.log("[WIX WEBHOOK] Decoded JWT payload:", JSON.stringify(payload).substring(0, 1000));
       } else {
         payload = JSON.parse(body);
+        console.log("[WIX WEBHOOK] Parsed JSON payload:", JSON.stringify(payload).substring(0, 1000));
       }
-    } catch {
+    } catch (parseErr) {
+      console.error("[WIX WEBHOOK] Failed to parse body:", parseErr);
       logger.error("Wix webhook: Failed to parse body");
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
