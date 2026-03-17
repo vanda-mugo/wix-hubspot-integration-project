@@ -228,6 +228,9 @@ export function buildWixContactPayload(
   if (fields.company) payload.company = fields.company;
   if (fields.jobTitle) payload.jobTitle = fields.jobTitle;
 
+  logger.info("[buildWixContactPayload] fields:", fields);
+  logger.info("[buildWixContactPayload] payload:", JSON.stringify(payload));
+
   return payload;
 }
 
