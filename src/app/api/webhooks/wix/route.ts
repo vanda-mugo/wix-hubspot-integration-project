@@ -8,103 +8,122 @@ import { v4 as uuidv4 } from "uuid";
 /**
  * Wix Webhook Receiver
  *
- * Handles all Wix webhook events:
- * - app.installed              → create Installation record
- * - contact.created            → sync new contact to HubSpot
- * - contact.updated            → sync updated contact to HubSpot
- * - form_submission.created    → push form data to HubSpot
+ * Wix sends webhooks as JWT tokens. The payload is triple-nested:
+ *   JWT body → { data: "<JSON string>" }
+ *     → parse data → { data: "<JSON string>", instanceId: "..." }
+ *       → parse inner data → { entityFqdn, slug, entityId, updatedEvent/createdEvent }
  *
- * Wix sends webhook payloads as JWT-signed strings (not JSON).
+ * Event type is derived from entityFqdn + slug:
+ *   "wix.contacts.v4.contact" + "updated" → contact update
  */
 
 export async function POST(request: NextRequest) {
   try {
-    // Log all relevant headers
-    const headersObj: Record<string, string> = {};
-    request.headers.forEach((value, key) => {
-      if (key.startsWith("x-wix") || key.startsWith("x-") || key === "content-type") {
-        headersObj[key] = value;
-      }
-    });
-    console.log("[WIX WEBHOOK] Headers:", JSON.stringify(headersObj));
-
     const body = await request.text();
-    console.log("[WIX WEBHOOK] Raw body length:", body?.length);
-    console.log("[WIX WEBHOOK] Raw body (first 1000 chars):", body?.substring(0, 1000));
 
     if (!body) {
       return NextResponse.json({ error: "Empty body" }, { status: 400 });
     }
 
-    // Decode JWT payload
-    let payload: Record<string, unknown>;
+    // ── Step 1: Decode JWT payload ─────────────────────────
+    let jwtPayload: Record<string, unknown>;
     try {
       const parts = body.split(".");
       if (parts.length === 3) {
         const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const jsonStr = Buffer.from(base64, "base64").toString("utf-8");
-        payload = JSON.parse(jsonStr);
-        console.log("[WIX WEBHOOK] Decoded JWT payload keys:", Object.keys(payload));
-        console.log("[WIX WEBHOOK] Decoded JWT payload:", JSON.stringify(payload).substring(0, 2000));
+        jwtPayload = JSON.parse(jsonStr);
       } else {
-        payload = JSON.parse(body);
-        console.log("[WIX WEBHOOK] Parsed JSON payload keys:", Object.keys(payload));
-        console.log("[WIX WEBHOOK] Parsed JSON payload:", JSON.stringify(payload).substring(0, 2000));
+        jwtPayload = JSON.parse(body);
       }
-    } catch (parseErr) {
-      console.error("[WIX WEBHOOK] Failed to parse body:", parseErr);
+    } catch {
       logger.error("Wix webhook: Failed to parse body");
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    // Extract event metadata — check multiple possible locations
-    const dataObj = payload.data as Record<string, unknown> | undefined;
-    const eventType =
-      (payload.webhookEvent as string) ||
-      (payload.eventType as string) ||
-      (payload.event as string) ||
-      (dataObj?.eventType as string) ||
-      (dataObj?.type as string) ||
-      (request.headers.get("x-wix-event-type")) ||
-      (request.headers.get("x-wix-webhook-event")) ||
-      "unknown";
-    const instanceId =
-      (payload.instanceId as string) ||
-      (dataObj?.instanceId as string) ||
-      (payload.instance as string) ||
-      "unknown";
+    // ── Step 2: Parse outer data string ────────────────────
+    let outerData: Record<string, unknown> = {};
+    const rawOuter = jwtPayload.data;
+    if (typeof rawOuter === "string") {
+      try {
+        outerData = JSON.parse(rawOuter);
+      } catch {
+        logger.error("Wix webhook: Failed to parse outer data string");
+        return NextResponse.json({ received: true });
+      }
+    } else if (rawOuter && typeof rawOuter === "object") {
+      outerData = rawOuter as Record<string, unknown>;
+    }
 
-    console.log("[WIX WEBHOOK] Resolved eventType:", eventType, "instanceId:", instanceId);
+    const instanceId = (outerData.instanceId as string) || "unknown";
 
+    // ── Step 3: Parse inner data string (the actual event) ─
+    let eventData: Record<string, unknown> = {};
+    const rawInner = outerData.data;
+    if (typeof rawInner === "string") {
+      try {
+        eventData = JSON.parse(rawInner);
+      } catch {
+        logger.error("Wix webhook: Failed to parse inner data string");
+        return NextResponse.json({ received: true });
+      }
+    } else if (rawInner && typeof rawInner === "object") {
+      eventData = rawInner as Record<string, unknown>;
+    }
+
+    // ── Step 4: Derive event type from entityFqdn + slug ──
+    const entityFqdn = (eventData.entityFqdn as string) || "";
+    const slug = (eventData.slug as string) || "";
+    const entityId = (eventData.entityId as string) || "";
+
+    let eventType = "unknown";
+    if (entityFqdn.includes("contact")) {
+      if (slug === "created") eventType = "contact.created";
+      else if (slug === "updated") eventType = "contact.updated";
+      else if (slug === "deleted") eventType = "contact.deleted";
+      else eventType = `contact.${slug || "unknown"}`;
+    } else if (entityFqdn.includes("form_submission") || entityFqdn.includes("submission")) {
+      eventType = "form_submission.created";
+    } else if (slug === "app_installed" || entityFqdn.includes("app")) {
+      eventType = "app.installed";
+    }
+
+    // Also check for app install via top-level payload fields
+    if (eventType === "unknown") {
+      const topEventType =
+        (jwtPayload.eventType as string) ||
+        (jwtPayload.webhookEvent as string) ||
+        request.headers.get("x-wix-event-type") ||
+        "";
+      if (topEventType.toLowerCase().includes("install")) {
+        eventType = "app.installed";
+      }
+    }
+
+    console.log(
+      `[WIX WEBHOOK] eventType=${eventType} entityFqdn=${entityFqdn} slug=${slug} entityId=${entityId} instanceId=${instanceId}`,
+    );
     logger.info(`Wix webhook: ${eventType} for instance ${instanceId}`);
 
-    // Route by event type
+    // ── Step 5: Route to handler ───────────────────────────
     switch (true) {
-      case eventType.includes("app.installed") ||
-        eventType.includes("AppInstalled"):
+      case eventType === "app.installed":
         await handleAppInstalled(instanceId);
         break;
 
-      case eventType.includes("contact.created") ||
-        eventType.includes("ContactCreated"):
-        await handleContactEvent(instanceId, payload, "contact.created");
+      case eventType === "contact.created":
+      case eventType === "contact.updated":
+        await handleContactEvent(instanceId, eventData, entityId, eventType);
         break;
 
-      case eventType.includes("contact.updated") ||
-        eventType.includes("ContactUpdated"):
-        await handleContactEvent(instanceId, payload, "contact.updated");
-        break;
-
-      case eventType.includes("form_submission") ||
-        eventType.includes("FormSubmission"):
-        await handleFormSubmission(instanceId, payload);
+      case eventType.startsWith("form_submission"):
+        await handleFormSubmission(instanceId, eventData);
         break;
 
       default:
         logger.info(`Wix webhook: Unhandled event type: ${eventType}`);
     }
 
-    // Must respond 200 within 1250ms or Wix will retry
     return NextResponse.json({ received: true });
   } catch (error) {
     logger.error("Wix webhook error:", error);
@@ -153,7 +172,8 @@ async function handleAppInstalled(instanceId: string) {
 
 async function handleContactEvent(
   instanceId: string,
-  payload: Record<string, unknown>,
+  eventData: Record<string, unknown>,
+  entityId: string,
   eventType: string,
 ) {
   // Find installation
@@ -171,27 +191,8 @@ async function handleContactEvent(
     return;
   }
 
-  // Extract contact ID from the payload
-  const dataObj = payload.data as Record<string, unknown> | undefined;
-  const innerData = dataObj?.data;
-  let contactId: string | undefined;
-
-  if (typeof innerData === "string") {
-    try {
-      const parsed = JSON.parse(innerData);
-      contactId = parsed.contactId || parsed.id;
-    } catch {
-      // Not JSON
-    }
-  } else if (innerData && typeof innerData === "object") {
-    contactId =
-      (innerData as Record<string, string>).contactId ||
-      (innerData as Record<string, string>).id;
-  }
-
-  // Also check top-level entityId
-  contactId =
-    contactId || (payload.entityId as string) || (dataObj?.entityId as string);
+  // Contact ID comes from entityId (already extracted from the nested payload)
+  const contactId = entityId || (eventData.entityId as string);
 
   if (!contactId) {
     logger.warn("Could not extract contact ID from webhook payload");
@@ -199,9 +200,11 @@ async function handleContactEvent(
   }
 
   const eventId =
-    (payload.eventId as string) ||
-    (dataObj?.eventId as string) ||
-    `wix-${contactId}-${Date.now()}`;
+    (eventData.id as string) || `wix-${contactId}-${Date.now()}`;
+
+  console.log(
+    `[WIX WEBHOOK] Syncing contact ${contactId} (event: ${eventType}, eventId: ${eventId})`,
+  );
 
   // Fire-and-forget sync (respond 200 immediately)
   syncWixToHubSpot(
@@ -217,7 +220,7 @@ async function handleContactEvent(
 
 async function handleFormSubmission(
   instanceId: string,
-  payload: Record<string, unknown>,
+  eventData: Record<string, unknown>,
 ) {
   const installation = await prisma.installation.findUnique({
     where: { wixInstanceId: instanceId },
@@ -233,20 +236,8 @@ async function handleFormSubmission(
     return;
   }
 
-  // Extract form data
-  const dataObj = payload.data as Record<string, unknown> | undefined;
-  const innerData = dataObj?.data;
-  let formData: Record<string, unknown> = {};
-
-  if (typeof innerData === "string") {
-    try {
-      formData = JSON.parse(innerData);
-    } catch {
-      formData = {};
-    }
-  } else if (innerData && typeof innerData === "object") {
-    formData = innerData as Record<string, unknown>;
-  }
+  // eventData is the already-parsed inner event object
+  const formData = eventData;
 
   const submissions =
     (formData.submissions as Record<string, string>) ||
@@ -254,7 +245,7 @@ async function handleFormSubmission(
     {};
 
   const eventId =
-    (payload.eventId as string) ||
+    (formData.id as string) ||
     (formData.submissionId as string) ||
     `form-${uuidv4()}`;
 
