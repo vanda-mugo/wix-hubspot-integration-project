@@ -1,86 +1,121 @@
-# Wix ↔ HubSpot Integration App
 
-## Overview
-This app provides seamless, bi-directional contact synchronization between Wix and HubSpot. It is built with Next.js (App Router), TypeScript, Prisma, and uses the official Wix and HubSpot APIs. The app is self-hosted and designed for deployment on Vercel.
+# Wix ↔ HubSpot Contact Sync App
 
-**Features:**
-- Bi-directional contact sync: Wix → HubSpot and HubSpot → Wix
-- Field mapping UI for custom property mapping
-- OAuth 2.0 secure connection to HubSpot
-- Loop prevention (no infinite syncs)
-- Form submission capture with UTM attribution
+Bi-directional contact sync between Wix and HubSpot with form capture, UTM attribution, and customizable field mapping.
+
+# Demonstration video found in : 
+
+https://drive.google.com/drive/folders/1hPQQaDhtESAS30q591FWuHoHQjT2FXGb?usp=drive_link
+
+## Features
+- Sync contacts between Wix and HubSpot in both directions
+- Field mapping dashboard with support for custom properties
+- Webhook-based updates for real-time sync
+- Retry logic for failed syncs
+- UTM attribution and form capture
+- Dashboard UI for mapping, status, and logs
+- Loop prevention logic to avoid infinite syncs
 - Conflict resolution strategies (Last Updated Wins, Wix Wins, HubSpot Wins)
-- Dashboard for connection status, mappings, and sync activity
 
-## Tech Stack
-- **Next.js 16 (App Router)**
-- **TypeScript 5.9**
-- **Prisma v7** (PostgreSQL via Neon)
-- **@wix/sdk** (REST API, AppStrategy)
-- **@hubspot/api-client**
-- **AES-256-GCM** for token encryption
-- **Vercel** (recommended deployment)
+## Project Structure
+- `src/app/api/webhooks/wix/route.ts`: Handles Wix webhooks
+- `src/app/api/webhooks/hubspot/route.ts`: Handles HubSpot webhooks
+- `src/lib/sync-engine.ts`: Core sync logic
+- `src/lib/field-mapper.ts`: Field mapping and payload builders
+- `src/app/dashboard/page.tsx`: Dashboard UI
+- `src/types/index.ts`: Shared types and interfaces
+
+## API Endpoints
+- `/api/webhooks/wix`: Receives Wix webhook events
+- `/api/webhooks/hubspot`: Receives HubSpot webhook events
+- `/api/mappings`: Manage field mappings
+- `/api/settings`: Manage sync settings and conflict strategy
+- `/api/sync/status`: View sync status and recent events
+
+## Advanced Features
+- UTM attribution and form capture support
+- Retry logic for failed syncs (409 revision errors)
+- Custom property mapping (ensure custom fields exist in both Wix and HubSpot)
+
+## Database Schema
+- Prisma migrations and schema tables:
+  - Installations
+  - Field mappings
+  - Contact mappings
+  - Sync events
+  - Processed events
+
+## Security
+- OAuth 2.0 for HubSpot authentication
+- JWT handling for Wix webhooks
+- HMAC signature verification for HubSpot webhooks
+
+## Logging & Error Handling
+- All sync errors are logged and visible in the dashboard
+- Logs include webhook payloads, mapped fields, and sync results
+
+## Custom Properties
+- To sync custom fields, ensure they exist in both Wix and HubSpot and add mappings in the dashboard
+
+## Testing
+- Update contacts in Wix/HubSpot and check logs and dashboard for sync
+- Use HubSpot’s test webhook feature for development
+
+## Contributing
+- Open issues or submit PRs for bug fixes and enhancements
+
+## Limitations
+- Only standard and mapped custom fields are synced
+- Webhook events must include changed properties
+
+## Architecture
+- Sync flow: Wix ↔ Webhook ↔ Sync Engine ↔ HubSpot
 
 ## Setup
 
-### 1. Environment Variables
-Create a `.env` file with the following:
+### Prerequisites
+- Node.js 18+
+- HubSpot developer account
+- Wix developer account
+- Vercel (for deployment)
 
+### Environment Variables
+Create a `.env` file with:
 ```
-DATABASE_URL=postgresql://... # Neon or other Postgres
-WIX_APP_ID=...
-WIX_APP_SECRET=...
-HUBSPOT_CLIENT_ID=...
-HUBSPOT_CLIENT_SECRET=...
-ENCRYPTION_KEY=... # 32 bytes, base64
-NEXTAUTH_SECRET=... # for NextAuth if used
+HUBSPOT_CLIENT_ID=your_client_id
+HUBSPOT_CLIENT_SECRET=your_client_secret
+HUBSPOT_APP_ID=your_app_id
+WIX_APP_ID=your_wix_app_id
+DATABASE_URL=your_postgres_url
+NEXT_PUBLIC_WIX_INSTANCE=your_wix_instance
 ```
 
-### 2. Database
-- Run `npx prisma migrate deploy` to apply migrations.
-- The schema includes tables for installations, field mappings, contact mappings, sync events, and processed events.
+### HubSpot App Setup
+- Create a HubSpot app in your developer portal
+- Set redirect URLs and webhook target URL as per `public_app.json` and `webhooks.json`
+- Add required scopes: `crm.objects.contacts.read`, `crm.objects.contacts.write`, `crm.schemas.contacts.read`
+- Subscribe to property changes for `email`, `firstname`, `lastname`, `phone`, etc.
 
-### 3. HubSpot App
-- Create a HubSpot developer app with the following scopes:
-  - `crm.objects.contacts.read`
-  - `crm.objects.contacts.write`
-  - `crm.schemas.contacts.write`
-- Set the OAuth redirect URI to: `https://<your-vercel-domain>/api/auth/hubspot/callback`
-- Set the webhook target URL to: `https://<your-vercel-domain>/api/webhooks/hubspot`
-- Add webhook subscriptions for:
-  - `object.creation` (contact)
-  - `object.propertyChange` (contact, email, firstname, lastname, phone, company)
+### Wix App Setup
+- Create a Wix app and configure instance and permissions
 
-### 4. Wix App
-- Register your app in the Wix Developers Center.
-- Set the app's redirect and webhook URLs to your Vercel deployment.
-- Use the AppStrategy for authentication.
-
-### 5. Deploy
-- Deploy to Vercel (recommended) or your own Node.js host.
-- Set all environment variables in your deployment environment.
+### Local Development
+```
+npm install
+npm run dev
+```
 
 ## Usage
+- Open the dashboard at `/dashboard`
+- Connect HubSpot and Wix accounts
+- Configure field mappings (select internal property names for HubSpot)
+- Save mappings and test sync by updating contacts in either platform
 
-1. **Connect HubSpot**: Log in to your Wix dashboard, open the app, and connect your HubSpot account via OAuth.
-2. **Configure Field Mappings**: Use the dashboard to map Wix fields to HubSpot properties. Six defaults are provided (first name, last name, email, phone, company, job title).
-3. **Sync Contacts**: Contacts created or updated in either platform will sync to the other, respecting your field mappings and conflict strategy.
-4. **View Sync Activity**: The dashboard shows recent sync events, errors, and status.
+## Deployment
+- Deploy to Vercel or your preferred platform
+- Ensure environment variables and webhook URLs are set correctly
 
-## Development
-- `npx next dev` — Start local dev server
-- `npx next build` — Build for production
-- `npx prisma studio` — Open Prisma DB browser
-
-## Key Files
-- `src/app/api/webhooks/wix/route.ts` — Handles Wix webhooks
-- `src/app/api/webhooks/hubspot/route.ts` — Handles HubSpot webhooks
-- `src/lib/sync-engine.ts` — Core sync logic
-- `src/lib/field-mapper.ts` — Field mapping and payload builders
-- `src/app/dashboard/page.tsx` — Dashboard UI
-
-## Notes
-- **Loop prevention**: The app tracks sync events and prevents infinite update loops between platforms.
-- **Custom properties**: If you want to sync custom fields, ensure they exist in both Wix and HubSpot and add mappings in the dashboard.
-- **Error handling**: All sync errors are logged and visible in the dashboard.
-
+## Troubleshooting
+- Phone sync: Ensure HubSpot webhook sends the `phone` property
+- Webhook errors: Check logs and verify webhook subscriptions
+- Token issues: App auto-refreshes tokens, but check credentials if sync fails
