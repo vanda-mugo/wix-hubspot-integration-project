@@ -82,7 +82,10 @@ export async function POST(request: NextRequest) {
       else if (slug === "updated") eventType = "contact.updated";
       else if (slug === "deleted") eventType = "contact.deleted";
       else eventType = `contact.${slug || "unknown"}`;
-    } else if (entityFqdn.includes("form_submission") || entityFqdn.includes("submission")) {
+    } else if (
+      entityFqdn.includes("form_submission") ||
+      entityFqdn.includes("submission")
+    ) {
       eventType = "form_submission.created";
     } else if (slug === "app_installed" || entityFqdn.includes("app")) {
       eventType = "app.installed";
@@ -199,8 +202,7 @@ async function handleContactEvent(
     return;
   }
 
-  const eventId =
-    (eventData.id as string) || `wix-${contactId}-${Date.now()}`;
+  const eventId = (eventData.id as string) || `wix-${contactId}-${Date.now()}`;
 
   console.log(
     `[WIX WEBHOOK] Syncing contact ${contactId} (event: ${eventType}, eventId: ${eventId})`,
