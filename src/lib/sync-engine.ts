@@ -67,11 +67,16 @@ export async function syncWixToHubSpot(
     const wixFields = extractWixContactFields(
       wixContact.contact as unknown as Record<string, unknown>,
     );
+    console.log(`[SYNC] Extracted Wix fields:`, JSON.stringify(wixFields));
+
     const mappings = await getFieldMappings(installationId);
+    console.log(`[SYNC] Field mappings count: ${mappings.length}`);
+
     const hubspotProps = mapWixToHubSpot(
       wixFields,
       mappings,
     ) as HubSpotContactProperties;
+    console.log(`[SYNC] Mapped HubSpot props:`, JSON.stringify(hubspotProps));
 
     if (Object.keys(hubspotProps).length === 0) {
       logger.info("No mapped fields to sync for this contact");

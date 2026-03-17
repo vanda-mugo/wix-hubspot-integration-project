@@ -6,43 +6,70 @@ import { SyncDirection } from "@/generated/prisma";
 /**
  * Wix contact field → flat value extraction.
  * Maps nested Wix contact structure to flat key-value pairs.
+ * Wix v4 API nests contact data under `info`, so we check both paths.
  */
 export function extractWixContactFields(
   contact: Record<string, unknown>,
 ): Record<string, string> {
   const fields: Record<string, string> = {};
 
-  // Name fields
-  const name = contact.name as Record<string, unknown> | undefined;
+  // Wix v4 API nests fields under `info`
+  const info = (contact.info as Record<string, unknown>) || {};
+
+  // Name fields — check info.name first, then top-level name
+  const name =
+    (info.name as Record<string, unknown>) ||
+    (contact.name as Record<string, unknown>);
   if (name?.first) fields.firstName = String(name.first);
   if (name?.last) fields.lastName = String(name.last);
 
-  // Email (take first)
-  const emails = contact.emails as
-    | { items?: Array<{ email?: string }> }
-    | undefined;
-  if (emails?.items?.[0]?.email) fields.email = emails.items[0].email;
+  // Email — check info.emails, then top-level emails, then primaryInfo
+  const emails =
+    (info.emails as { items?: Array<{ email?: string }> }) ||
+    (contact.emails as { items?: Array<{ email?: string }> });
+  if (emails?.items?.[0]?.email) {
+    fields.email = emails.items[0].email;
+  } else {
+    // Fallback to primaryInfo or primaryEmail
+    const primaryInfo = contact.primaryInfo as Record<string, unknown> | undefined;
+    const primaryEmail = contact.primaryEmail as Record<string, unknown> | undefined;
+    const email =
+      (primaryInfo?.email as string) || (primaryEmail?.email as string);
+    if (email) fields.email = email;
+  }
 
-  // Phone (take first)
-  const phones = contact.phones as
-    | { items?: Array<{ phone?: string }> }
-    | undefined;
-  if (phones?.items?.[0]?.phone) fields.phone = phones.items[0].phone;
+  // Phone — check info.phones, then top-level phones, then primaryInfo
+  const phones =
+    (info.phones as { items?: Array<{ phone?: string }> }) ||
+    (contact.phones as { items?: Array<{ phone?: string }> });
+  if (phones?.items?.[0]?.phone) {
+    fields.phone = phones.items[0].phone;
+  } else {
+    const primaryInfo = contact.primaryInfo as Record<string, unknown> | undefined;
+    const primaryPhone = contact.primaryPhone as Record<string, unknown> | undefined;
+    const phone =
+      (primaryInfo?.phone as string) || (primaryPhone?.phone as string);
+    if (phone) fields.phone = phone;
+  }
 
-  // Company
-  const company = contact.company as Record<string, unknown> | undefined;
+  // Company — check info.company, then top-level company
+  const company =
+    (info.company as Record<string, unknown>) ||
+    (contact.company as Record<string, unknown>);
   if (company?.name) fields.company = String(company.name);
 
-  // Job title
-  if (contact.jobTitle) fields.jobTitle = String(contact.jobTitle);
+  // Job title — check info.jobTitle, then top-level
+  const jobTitle = (info.jobTitle as string) || (contact.jobTitle as string);
+  if (jobTitle) fields.jobTitle = String(jobTitle);
 
   // Birthdate
-  if (contact.birthdate) fields.birthdate = String(contact.birthdate);
+  const birthdate = (info.birthdate as string) || (contact.birthdate as string);
+  if (birthdate) fields.birthdate = String(birthdate);
 
-  // Address (take first)
-  const addresses = contact.addresses as
-    | { items?: Array<Record<string, unknown>> }
-    | undefined;
+  // Address — check info.addresses, then top-level
+  const addresses =
+    (info.addresses as { items?: Array<Record<string, unknown>> }) ||
+    (contact.addresses as { items?: Array<Record<string, unknown>> });
   if (addresses?.items?.[0]) {
     const addr = addresses.items[0];
     if (addr.street) fields.street = String(addr.street);
