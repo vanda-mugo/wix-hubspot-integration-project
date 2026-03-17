@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { getDefaultFieldMappings } from "@/lib/field-mapper";
 
 /**
  * POST /api/auth/wix/resolve
@@ -56,6 +57,25 @@ export async function POST(request: NextRequest) {
       create: { wixInstanceId: instanceId },
       update: {},
     });
+
+    // Seed default field mappings if none exist
+    const existingMappings = await prisma.fieldMapping.count({
+      where: { installationId: installation.id },
+    });
+
+    if (existingMappings === 0) {
+      const defaults = getDefaultFieldMappings();
+      await prisma.fieldMapping.createMany({
+        data: defaults.map((m) => ({
+          installationId: installation.id,
+          wixField: m.wixField,
+          hubspotProperty: m.hubspotProperty,
+          syncDirection: m.syncDirection,
+          transform: m.transform || null,
+        })),
+      });
+      console.log(`[WIX RESOLVE] Seeded ${defaults.length} default field mappings for ${instanceId}`);
+    }
 
     return NextResponse.json({
       success: true,

@@ -194,6 +194,24 @@ async function handleContactEvent(
     return;
   }
 
+  // Ensure default field mappings exist (they may be missing if app.installed webhook was never received)
+  const mappingCount = await prisma.fieldMapping.count({
+    where: { installationId: installation.id },
+  });
+  if (mappingCount === 0) {
+    const defaults = getDefaultFieldMappings();
+    await prisma.fieldMapping.createMany({
+      data: defaults.map((m) => ({
+        installationId: installation.id,
+        wixField: m.wixField,
+        hubspotProperty: m.hubspotProperty,
+        syncDirection: m.syncDirection,
+        transform: m.transform || null,
+      })),
+    });
+    console.log(`[WIX WEBHOOK] Seeded ${defaults.length} default field mappings`);
+  }
+
   // Contact ID comes from entityId (already extracted from the nested payload)
   const contactId = entityId || (eventData.entityId as string);
 
