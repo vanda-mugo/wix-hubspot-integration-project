@@ -438,7 +438,7 @@ export default function DashboardPage() {
                       >
                         {hubspotFields.map((f) => (
                           <option key={f.value} value={f.value}>
-                            {f.label}
+                            {f.label} ({f.value})
                           </option>
                         ))}
                       </select>
