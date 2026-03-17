@@ -399,6 +399,7 @@ export default function DashboardPage() {
             No mappings configured. Add mappings or reset to defaults.
           </p>
         ) : (
+          <div style={{ overflowX: "auto" as const }}>
           <table style={styles.table}>
             <thead>
               <tr>
@@ -482,6 +483,7 @@ export default function DashboardPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         <div style={{ marginTop: 16 }}>
@@ -576,6 +578,7 @@ export default function DashboardPage() {
         {syncStatus?.recentEvents && syncStatus.recentEvents.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <h3 style={{ fontSize: 14, marginBottom: 8 }}>Recent Activity</h3>
+            <div style={{ overflowX: "auto" as const }}>
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -607,13 +610,25 @@ export default function DashboardPage() {
                         {evt.status}
                       </span>
                     </td>
-                    <td style={{ ...styles.td, fontSize: 12, color: "#666" }}>
+                    <td
+                      style={{
+                        ...styles.td,
+                        fontSize: 12,
+                        color: "#666",
+                        wordBreak: "break-word" as const,
+                        overflow: "hidden" as const,
+                        textOverflow: "ellipsis" as const,
+                        maxWidth: 0,
+                      }}
+                      title={evt.error || ""}
+                    >
                       {evt.error || "—"}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
@@ -635,9 +650,11 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "32px 24px",
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    maxWidth: 880,
+    maxWidth: "100%",
     margin: "0 auto",
     color: "#1a1a1a",
+    boxSizing: "border-box" as const,
+    overflowX: "hidden" as const,
   },
   title: {
     fontSize: 24,
@@ -691,6 +708,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: "100%",
     borderCollapse: "collapse" as const,
     fontSize: 13,
+    tableLayout: "fixed" as const,
   },
   th: {
     textAlign: "left" as const,
@@ -712,6 +730,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 4,
     fontSize: 13,
     backgroundColor: "#fff",
+    boxSizing: "border-box" as const,
   },
   btnPrimary: {
     backgroundColor: "#0070f3",

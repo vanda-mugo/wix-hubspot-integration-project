@@ -492,8 +492,8 @@ export async function syncFormToHubSpot(
     if (submission.pageUrl) properties.wix_form_page_url = submission.pageUrl;
     if (submission.referrer) properties.wix_form_referrer = submission.referrer;
 
-    // Add sync source marker
-    properties.wix_sync_source = correlationId;
+    // Note: wix_sync_source removed — property doesn't exist unless created via crm.schemas.contacts.write scope.
+    // Loop prevention works via database (ContactMapping.syncCorrelationId) regardless.
 
     if (!properties.email) {
       logger.warn(
