@@ -1,0 +1,127 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────
+
+enum SyncDirection {
+  WIX_TO_HUBSPOT
+  HUBSPOT_TO_WIX
+  BIDIRECTIONAL
+}
+
+enum SyncSource {
+  WIX
+  HUBSPOT
+}
+
+enum ConflictStrategy {
+  LAST_UPDATED_WINS
+  HUBSPOT_WINS
+  WIX_WINS
+}
+
+enum SyncStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// ─── Tables ───────────────────────────────────────────────
+
+/// One row per Wix site that installs our app.
+/// Stores HubSpot OAuth tokens (encrypted) and sync settings.
+model Installation {
+  id               String           @id @default(cuid())
+  wixInstanceId    String           @unique
+  hubspotPortalId  String?
+  hsAccessToken    String?          // AES-256-GCM encrypted
+  hsRefreshToken   String?          // AES-256-GCM encrypted
+  tokenExpiresAt   DateTime?
+  conflictStrategy ConflictStrategy @default(LAST_UPDATED_WINS)
+  isConnected      Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  contactMappings  ContactMapping[]
+  fieldMappings    FieldMapping[]
+  syncEvents       SyncEvent[]
+  processedEvents  ProcessedEvent[]
+}
+
+/// Links a Wix contact to its HubSpot counterpart.
+/// Used for sync routing and loop prevention.
+model ContactMapping {
+  id                String       @id @default(cuid())
+  installationId    String
+  installation      Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  wixContactId      String
+  hubspotContactId  String
+  lastSyncedAt      DateTime     @default(now())
+  lastSyncSource    SyncSource
+  syncCorrelationId String?
+
+  @@unique([installationId, wixContactId])
+  @@unique([installationId, hubspotContactId])
+  @@index([wixContactId])
+  @@index([hubspotContactId])
+}
+
+/// User-configured field mapping rules.
+/// Controls which Wix fields map to which HubSpot properties.
+model FieldMapping {
+  id              String        @id @default(cuid())
+  installationId  String
+  installation    Installation  @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  wixField        String
+  hubspotProperty String
+  syncDirection   SyncDirection
+  transform       String?       // "trim", "lowercase", "uppercase", or null
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([installationId, hubspotProperty])
+  @@index([installationId])
+}
+
+/// Audit log of every sync operation.
+model SyncEvent {
+  id               String      @id @default(cuid())
+  installationId   String
+  installation     Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  eventType        String
+  source           SyncSource
+  correlationId    String
+  status           SyncStatus
+  wixContactId     String?
+  hubspotContactId String?
+  payload          Json?
+  error            String?
+  createdAt        DateTime    @default(now())
+
+  @@index([installationId, createdAt])
+  @@index([correlationId])
+  @@index([wixContactId, createdAt])
+  @@index([hubspotContactId, createdAt])
+}
+
+/// Tracks processed webhook event IDs to prevent duplicate processing.
+model ProcessedEvent {
+  id             String       @id @default(cuid())
+  installationId String
+  installation   Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  eventId        String
+  processedAt    DateTime     @default(now())
+
+  @@unique([installationId, eventId])
+  @@index([processedAt])
+}
