@@ -57,7 +57,7 @@ async function wixFetch(
   return response;
 }
 
-// ─── Wix Contact Operations (REST API) ───────────────────
+// ─── Wix Contact Operations (REST API)
 
 /**
  * Fetch a Wix contact by ID.
@@ -109,30 +109,46 @@ export async function updateWixContact(
   contactId: string,
   contactData: Record<string, unknown>,
 ): Promise<{ id?: string; [key: string]: unknown }> {
-  try {
-    // Get current revision
-    const current = await getWixContact(instanceId, contactId);
-    const revision =
-      (current.contact as Record<string, unknown>)?.revision ?? 1;
+  let attempts = 0;
+  while (attempts < 2) {
+    try {
+      // Get current revision
+      const current = await getWixContact(instanceId, contactId);
+      const revision =
+        (current.contact as Record<string, unknown>)?.revision ?? 1;
 
-    const response = await wixFetch(
-      instanceId,
-      `/contacts/v4/contacts/${contactId}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({
-          info: contactData,
-          revision,
-        }),
-      },
-    );
-    const result = await response.json();
-    logger.info("Updated Wix contact:", contactId);
-    return result.contact || result;
-  } catch (error) {
-    logger.error("Failed to update Wix contact:", contactId, error);
-    throw error;
+      const response = await wixFetch(
+        instanceId,
+        `/contacts/v4/contacts/${contactId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            info: contactData,
+            revision,
+          }),
+        },
+      );
+      const result = await response.json();
+      if (
+        result?.message ===
+          "Contact has been updated since the requested revision." ||
+        result?.details?.applicationError?.code === "CONTACT_ALREADY_CHANGED"
+      ) {
+        logger.warn(
+          "Wix contact update 409: retrying with latest revision",
+          contactId,
+        );
+        attempts++;
+        continue;
+      }
+      logger.info("Updated Wix contact:", contactId);
+      return result.contact || result;
+    } catch (error) {
+      logger.error("Failed to update Wix contact:", contactId, error);
+      throw error;
+    }
   }
+  throw new Error("Failed to update Wix contact after retrying revision");
 }
 
 /**

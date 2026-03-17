@@ -400,89 +400,89 @@ export default function DashboardPage() {
           </p>
         ) : (
           <div style={{ overflowX: "auto" as const }}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Wix Field</th>
-                <th style={styles.th}>HubSpot Property</th>
-                <th style={styles.th}>Direction</th>
-                <th style={styles.th}>Transform</th>
-                <th style={styles.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.map((m, i) => (
-                <tr key={i}>
-                  <td style={styles.td}>
-                    <select
-                      value={m.wixField}
-                      onChange={(e) =>
-                        updateMapping(i, "wixField", e.target.value)
-                      }
-                      style={styles.select}
-                    >
-                      {wixFields.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td style={styles.td}>
-                    <select
-                      value={m.hubspotProperty}
-                      onChange={(e) =>
-                        updateMapping(i, "hubspotProperty", e.target.value)
-                      }
-                      style={styles.select}
-                    >
-                      {hubspotFields.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td style={styles.td}>
-                    <select
-                      value={m.syncDirection}
-                      onChange={(e) =>
-                        updateMapping(i, "syncDirection", e.target.value)
-                      }
-                      style={styles.select}
-                    >
-                      <option value="BIDIRECTIONAL">↔ Both</option>
-                      <option value="WIX_TO_HUBSPOT">→ Wix → HS</option>
-                      <option value="HUBSPOT_TO_WIX">← HS → Wix</option>
-                    </select>
-                  </td>
-                  <td style={styles.td}>
-                    <select
-                      value={m.transform || ""}
-                      onChange={(e) =>
-                        updateMapping(i, "transform", e.target.value || null!)
-                      }
-                      style={styles.select}
-                    >
-                      <option value="">None</option>
-                      <option value="trim">Trim</option>
-                      <option value="lowercase">Lowercase</option>
-                      <option value="uppercase">Uppercase</option>
-                    </select>
-                  </td>
-                  <td style={styles.td}>
-                    <button
-                      onClick={() => removeMapping(i)}
-                      style={styles.btnRemove}
-                      title="Remove"
-                    >
-                      ×
-                    </button>
-                  </td>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Wix Field</th>
+                  <th style={styles.th}>HubSpot Property</th>
+                  <th style={styles.th}>Direction</th>
+                  <th style={styles.th}>Transform</th>
+                  <th style={styles.th}></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {mappings.map((m, i) => (
+                  <tr key={i}>
+                    <td style={styles.td}>
+                      <select
+                        value={m.wixField}
+                        onChange={(e) =>
+                          updateMapping(i, "wixField", e.target.value)
+                        }
+                        style={styles.select}
+                      >
+                        {wixFields.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={styles.td}>
+                      <select
+                        value={m.hubspotProperty}
+                        onChange={(e) =>
+                          updateMapping(i, "hubspotProperty", e.target.value)
+                        }
+                        style={styles.select}
+                      >
+                        {hubspotFields.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={styles.td}>
+                      <select
+                        value={m.syncDirection}
+                        onChange={(e) =>
+                          updateMapping(i, "syncDirection", e.target.value)
+                        }
+                        style={styles.select}
+                      >
+                        <option value="BIDIRECTIONAL">↔ Both</option>
+                        <option value="WIX_TO_HUBSPOT">→ Wix → HS</option>
+                        <option value="HUBSPOT_TO_WIX">← HS → Wix</option>
+                      </select>
+                    </td>
+                    <td style={styles.td}>
+                      <select
+                        value={m.transform || ""}
+                        onChange={(e) =>
+                          updateMapping(i, "transform", e.target.value || null!)
+                        }
+                        style={styles.select}
+                      >
+                        <option value="">None</option>
+                        <option value="trim">Trim</option>
+                        <option value="lowercase">Lowercase</option>
+                        <option value="uppercase">Uppercase</option>
+                      </select>
+                    </td>
+                    <td style={styles.td}>
+                      <button
+                        onClick={() => removeMapping(i)}
+                        style={styles.btnRemove}
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -579,55 +579,55 @@ export default function DashboardPage() {
           <div style={{ marginTop: 20 }}>
             <h3 style={{ fontSize: 14, marginBottom: 8 }}>Recent Activity</h3>
             <div style={{ overflowX: "auto" as const }}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Time</th>
-                  <th style={styles.th}>Type</th>
-                  <th style={styles.th}>Direction</th>
-                  <th style={styles.th}>Status</th>
-                  <th style={styles.th}>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {syncStatus.recentEvents.map((evt) => (
-                  <tr key={evt.id}>
-                    <td style={styles.td}>
-                      {new Date(evt.createdAt).toLocaleTimeString()}
-                    </td>
-                    <td style={styles.td}>{evt.eventType}</td>
-                    <td style={styles.td}>
-                      {evt.source === "WIX" ? "Wix → HS" : "HS → Wix"}
-                    </td>
-                    <td style={styles.td}>
-                      <span
-                        style={{
-                          color:
-                            evt.status === "SUCCESS" ? "#28a745" : "#dc3545",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {evt.status}
-                      </span>
-                    </td>
-                    <td
-                      style={{
-                        ...styles.td,
-                        fontSize: 12,
-                        color: "#666",
-                        wordBreak: "break-word" as const,
-                        overflow: "hidden" as const,
-                        textOverflow: "ellipsis" as const,
-                        maxWidth: 0,
-                      }}
-                      title={evt.error || ""}
-                    >
-                      {evt.error || "—"}
-                    </td>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Time</th>
+                    <th style={styles.th}>Type</th>
+                    <th style={styles.th}>Direction</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Details</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {syncStatus.recentEvents.map((evt) => (
+                    <tr key={evt.id}>
+                      <td style={styles.td}>
+                        {new Date(evt.createdAt).toLocaleTimeString()}
+                      </td>
+                      <td style={styles.td}>{evt.eventType}</td>
+                      <td style={styles.td}>
+                        {evt.source === "WIX" ? "Wix → HS" : "HS → Wix"}
+                      </td>
+                      <td style={styles.td}>
+                        <span
+                          style={{
+                            color:
+                              evt.status === "SUCCESS" ? "#28a745" : "#dc3545",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {evt.status}
+                        </span>
+                      </td>
+                      <td
+                        style={{
+                          ...styles.td,
+                          fontSize: 12,
+                          color: "#666",
+                          wordBreak: "break-word" as const,
+                          overflow: "hidden" as const,
+                          textOverflow: "ellipsis" as const,
+                          maxWidth: 0,
+                        }}
+                        title={evt.error || ""}
+                      >
+                        {evt.error || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
