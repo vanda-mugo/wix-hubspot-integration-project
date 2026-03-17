@@ -69,7 +69,7 @@ model ContactMapping {
   lastSyncSource    SyncSource
   syncCorrelationId String?
 
-  @@unique([installationId, wixContactId])
+  @@unique([installationId, wixContactId])  // ensure one to one mapping per site 
   @@unique([installationId, hubspotContactId])
   @@index([wixContactId])
   @@index([hubspotContactId])
