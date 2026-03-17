@@ -249,7 +249,10 @@ export async function syncHubSpotToWix(
     const hsContact = await getHubSpotContact(installationId, hubspotContactId);
     const hsProps = hsContact.properties as Record<string, string>;
 
-    logger.info("[syncHubSpotToWix] Raw HubSpot properties:", JSON.stringify(hsProps));
+    logger.info(
+      "[syncHubSpotToWix] Raw HubSpot properties:",
+      JSON.stringify(hsProps),
+    );
 
     // Check if this was our own write (by sync source marker)
     if (hsProps.wix_sync_source && hsProps.wix_sync_source.length > 0) {
