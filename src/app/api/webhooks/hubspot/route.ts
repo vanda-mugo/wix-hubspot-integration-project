@@ -97,6 +97,8 @@ export async function POST(request: NextRequest) {
       switch (event.subscriptionType) {
         case "contact.creation":
         case "contact.propertyChange":
+        case "object.creation":
+        case "object.propertyChange":
           try {
             await syncHubSpotToWix(
               installation.id,
